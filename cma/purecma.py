@@ -52,6 +52,8 @@ from sys import stdout as _stdout # not strictly necessary
 from math import log, exp
 from random import normalvariate as random_normalvariate
 
+import numpy as np
+
 try:
     from .interfaces import OOOptimizer, BaseDataLogger as _BaseDataLogger
 except (ImportError, ValueError):
@@ -152,10 +154,25 @@ def fmin(objective_fct, xstart, sigma,
     es = CMAES(xstart, sigma, maxfevals=maxfevals, ftarget=ftarget)
     if verb_log:  # prepare data logging
         es.logger = CMAESDataLogger(verb_log).add(es, force=True)
+      
+	first = True
+
     while not es.stop():
         X = es.ask()  # get a list of sampled candidate solutions
-        fit = [objective_fct(x, *args) for x in X]  # evaluate candidates
-        es.tell(X, fit)  # update distribution parameters
+        fit = objective_fct(np.array(X), *args).reshape(-1,)# evaluate candidates
+#        fit_update = fit[fit != ERROR_VALUE]
+#        X_update = [X[i] for i in range(len(fit)) if fit[i] != ERROR_VALUE]
+#        print("Warning : {} values have been filtered".format(len(X) - len(X_update)))
+        if first:
+			X_all = np.array(X)
+			fit_all = fit
+			#print(fit)
+			first = False
+        else:
+		    X_all = np.vstack((X_all, X))
+		    fit_all = np.vstack((fit_all.reshape(-1, 1), fit.reshape(-1, 1)))					
+					
+        es.tell(X, list(fit))  # update distribution parameters
 
     # that's it! The remainder is managing output behavior only.
         es.disp(verb_disp)
@@ -174,8 +191,7 @@ def fmin(objective_fct, xstart, sigma,
     if verb_log:
         es.logger.add(es, force=True)
         es.logger.save() if verb_save else None
-    return [es.best.x if es.best.f < objective_fct(es.xmean) else
-            es.xmean, es]
+    return X_all, fit_all
 
 
 class CMAESParameters(object):
@@ -376,10 +392,23 @@ class CMAES(OOOptimizer):  # could also inherit from object
                 the corresponding objective function values, to be
                 minimised
         """
+ 
+	    
         ### bookkeeping and convenience short cuts
-        self.counteval += len(fitvals)  # evaluations used within tell
+        self.counteval += len(fitvals)  # evaluations used within tell						
+        ERROR_VALUE = -99999
+        arx_old = arx		
+        fit_old = fitvals
+        fitvals = [val for val in fitvals if val != ERROR_VALUE]			
+        arx = [arx_old[i] for i in range(len(fit_old)) if fit_old[i] != ERROR_VALUE]
+        
+        print("Warning : {} values have been filtered".format(len(arx_old) - len(arx)))
+		
         N = len(self.xmean)
         par = self.params
+        #print(par.weights)
+        par.weights = [param for val, param in zip(fit_old, self.params.weights) if val != ERROR_VALUE]
+        #print(par.weights)
         xold = self.xmean  # not a copy, xmean is assigned anew later
 
         ### Sort by fitness
