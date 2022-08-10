@@ -1,4 +1,4 @@
-# pycma
+# pycma (Forked version of pycma with option to vectorize the computation of the objective function)
 
 A Python implementation of CMA-ES and a few related numerical optimization tools.
 
